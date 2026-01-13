@@ -10,7 +10,6 @@ $platforms = $db->query("SELECT id, name, code FROM platforms WHERE is_active=1"
 
 <head>
     <title>Catalog Converter</title>
-
     <style>
         body {
             font-family: Arial, Helvetica, sans-serif;
@@ -101,9 +100,7 @@ $platforms = $db->query("SELECT id, name, code FROM platforms WHERE is_active=1"
             flex: 1;
         }
     </style>
-
 </head>
-
 <body>
 
     <div class="wrapper">
@@ -164,13 +161,13 @@ $platforms = $db->query("SELECT id, name, code FROM platforms WHERE is_active=1"
         // 1. Select the Source Platform (Shopify)
         const sourceSelect = document.querySelector('select[name="source_platform"]');
         if (sourceSelect) {
-            sourceSelect.value = 'shopify';
+            sourceSelect.value = 'woocommerce';
         }
 
         // 2. Select the Target Platform (Woocommerce)
         const targetSelect = document.querySelector('select[name="target_platform"]');
         if (targetSelect) {
-            targetSelect.value = 'woocommerce';
+            targetSelect.value = 'shopify';
         }
     });
 </script>

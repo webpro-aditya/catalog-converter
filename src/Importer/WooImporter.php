@@ -14,8 +14,50 @@ class WooImporter
         $this->jobId = $jobId;
     }
 
+    public function truncateTables(array $tables)
+    {
+        try {
+            // Use the PDO instance already stored in your Database object
+            $pdo = $this->db->pdo;
+
+            // 1. Disable foreign key checks to allow truncating related tables
+            $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
+
+            foreach ($tables as $table) {
+                // Sanitize table name with backticks to prevent SQL errors
+                $pdo->exec("TRUNCATE TABLE `$table`");
+            }
+
+            // 2. Re-enable foreign key checks
+            $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
+
+            return true;
+        } catch (Exception $e) {
+            // Log error using your Logger class
+            Logger::log("Truncate Failed: " . $e->getMessage());
+            return false;
+        }
+    }
+
     public function import($filePath)
     {
+        $tablesToClear = [
+            'source_attributes',
+            'source_inventory',
+            'source_products',
+            'source_variants',
+            'source_images',
+            'universal_attributes',
+            'universal_images',
+            'universal_products',
+            'universal_variants'
+        ];
+
+        if (!$this->truncateTables($tablesToClear)) {
+            Logger::log("Failed to clear tables before import.");
+            die("An error occurred while clearing tables.");
+        }
+
         $fp = fopen($filePath, 'r');
         $headers = fgetcsv($fp);
 
@@ -64,6 +106,12 @@ class WooImporter
                     null,
                     $data
                 );
+
+                $this->saveImages(
+                    $products[$parentSku],
+                    null,
+                    $data
+                );
             }
 
             // -----------------------------
@@ -94,6 +142,12 @@ class WooImporter
                 $this->saveAttributes(
                     $products[$parentSku],
                     $variantId,
+                    $data
+                );
+
+                $this->saveImages(
+                    $products[$parentSku],
+                    null,
                     $data
                 );
             }
@@ -160,5 +214,33 @@ class WooImporter
             }
         }
         return true;
+    }
+
+    private function saveImages($productId, $variantId, $data)
+    {
+        // WooCommerce uses "Images" column (comma-separated)
+        if (empty($data['Images'])) {
+            return;
+        }
+
+        $urls = array_map('trim', explode(',', $data['Images']));
+        $position = 0;
+
+        foreach ($urls as $url) {
+            if ($url === '') continue;
+
+            $this->db->query("
+            INSERT INTO source_images
+            (product_id, variant_id, type, url, alt_text, position)
+            VALUES (?,?,?,?,?,?)
+        ", [
+                $productId,
+                $variantId,
+                $variantId ? 'variant_image' : 'image_src',
+                $url,
+                null,
+                $position++
+            ]);
+        }
     }
 }

@@ -91,39 +91,105 @@ $db->query("
     <title>Export Ready</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: Arial, Helvetica, sans-serif;
             background: #f4f6fb;
-            padding: 40px;
+            margin: 0;
+        }
+
+        .wrapper {
+            max-width: 700px;
+            margin: 60px auto;
+            padding: 10px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+            padding: 35px;
             text-align: center;
         }
-        .box {
-            background: #fff;
-            max-width: 500px;
-            margin: auto;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,.08);
+
+        .icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #e9f8ef;
+            color: #2fa84f;
+            font-size: 34px;
+            line-height: 70px;
+            margin: 0 auto 18px auto;
         }
-        a {
-            display: inline-block;
-            margin-top: 15px;
+
+        h2 {
+            margin: 0;
+            font-size: 26px;
+            color: #222;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-top: 8px;
+            margin-bottom: 25px;
+        }
+
+        a.download-btn {
             background: #4a6cf7;
             color: #fff;
-            padding: 12px 20px;
-            border-radius: 8px;
+            padding: 14px 22px;
+            border-radius: 10px;
             text-decoration: none;
+            font-size: 15px;
+            display: inline-block;
+            transition: .2s ease;
+        }
+
+        a.download-btn:hover {
+            background: #274df5;
+        }
+
+        .footer-note {
+            color: #777;
+            margin-top: 18px;
+            font-size: 13px;
+        }
+
+        .steps {
+            text-align: center;
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 12px;
         }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <h2>Shopify Export Ready</h2>
-    <p>Your WooCommerce data has been converted successfully.</p>
-    <a href="<?= '../uploads/' . basename($outputFile) ?>" download>
-        Download Shopify CSV
-    </a>
-</div>
+<div class="wrapper">
+
+        <div class="card">
+
+            <div class="icon">✓</div>
+
+            <div class="steps">Step 3 of 3 — Completed</div>
+
+            <h2>Your export file is ready</h2>
+
+            <div class="subtitle">
+                You can now download the converted CSV file and import it into the target platform.
+            </div>
+
+            <a href="<?= '../uploads/' . basename($outputFile) ?>" download class="download-btn">
+                Download Export File
+            </a>
+
+            <div class="footer-note">
+                Need to convert another file? <a href="step1_upload.php">Start a new import</a>
+            </div>
+
+        </div>
+
+    </div>
 
 </body>
 </html>

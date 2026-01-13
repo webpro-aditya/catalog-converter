@@ -34,7 +34,6 @@ $output = "../uploads/export_$jobId.csv";
 
 <head>
     <title>Export Ready</title>
-
     <style>
         body {
             font-family: Arial, Helvetica, sans-serif;

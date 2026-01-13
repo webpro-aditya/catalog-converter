@@ -105,13 +105,15 @@ class ShopifyExporter
 
         $out = [];
 
+        $counter = 0;
         foreach ($rows as $row) {
             if ($row['variant_id']) {
                 $out[$row['variant_id']][] = [
-                    'name'  => $row['name'],
+                    'name'  => ($counter === 0) ? $row['name'] : '',
                     'value' => $row['value']
                 ];
             }
+            $counter++;
         }
 
         return $out;

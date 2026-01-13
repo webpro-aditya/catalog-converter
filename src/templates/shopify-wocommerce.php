@@ -31,6 +31,12 @@
             font-size: 26px;
         }
 
+        small {
+            text-align: center;
+            display: block;
+            margin: 0 0 18px 0;
+        }
+
         .subtitle {
             text-align: center;
             color: #666;
@@ -122,7 +128,10 @@
 
         <div class="card">
 
-            <h2>Step 2 — Map Columns</h2>
+            <h2>
+                Step 2 — Map Columns
+            </h2>
+            <small>Shopify to Woocommerce</small>
             <div class="subtitle">
                 Match your source columns to the correct fields. You can adjust if needed.
             </div>
@@ -197,7 +206,9 @@
 
                 </div>
 
-                <button type="submit">Generate Export File →</button>
+                <button type="submit">
+                    Continue → Build Products
+                </button>
 
                 <div class="footer-note">
                     Step 2 of 3 — Review and confirm your mappings

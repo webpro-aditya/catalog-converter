@@ -1,0 +1,18 @@
+{
+    "name": "user/catalog-converter",
+    "autoload": {
+        "psr-4": {
+            "User\\CatalogConverter\\": "src/"
+        },
+        "files": [
+            "src/helpers.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Aditya Dandotia",
+            "email": "webpro.aditya@gmail.com"
+        }
+    ],
+    "require": {}
+}

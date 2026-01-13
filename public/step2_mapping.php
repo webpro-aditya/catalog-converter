@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../src/Database.php';
 require_once __DIR__ . '/../src/Importer/ShopifyImporter.php';
+require_once __DIR__ . '/../src/Importer/WooImporter.php';
 include_once __DIR__ . '/../src/Helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Invalid request");
@@ -10,6 +11,15 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Invalid request");
 $fileName = time() . "_" . $_FILES['csv']['name'];
 $filePath = "../uploads/$fileName";
 move_uploaded_file($_FILES['csv']['tmp_name'], $filePath);
+
+
+// defaults from platform_mappings
+$sourcePlatformCode = $_POST['source_platform'];
+$targetPlatformCode = $_POST['target_platform'];
+
+if ($sourcePlatformCode === $targetPlatformCode) {
+    die("Source and target platforms cannot be the same.");
+}
 
 $db = new Database();
 
@@ -24,25 +34,16 @@ VALUES (
 
 $jobId = $db->pdo->lastInsertId();
 
-$importer = new ShopifyImporter($jobId);
-$importer->import($filePath);
-
-// read csv header
-$fp = fopen($filePath, "r");
-$headers = fgetcsv($fp);
-fclose($fp);
-
-// defaults from platform_mappings
-$sourcePlatformCode = $_POST['source_platform'];
-$targetPlatformCode = $_POST['target_platform'];
-
-
-if ($sourcePlatformCode === $targetPlatformCode) {
-    die("Source and target platforms cannot be the same.");
-}
-
 
 if ($sourcePlatformCode === 'shopify' && $targetPlatformCode === 'woocommerce') {
+    $importer = new ShopifyImporter($jobId);
+    $importer->import($filePath);
+
+    // read csv header
+    $fp = fopen($filePath, "r");
+    $headers = fgetcsv($fp);
+    fclose($fp);
+
     $mappingTableColumns = $db->query("SHOW COLUMNS FROM platform_mappings")->fetchAll();
     $mappingTableFields = array_column($mappingTableColumns, 'Field');
 
@@ -78,6 +79,26 @@ if ($sourcePlatformCode === 'shopify' && $targetPlatformCode === 'woocommerce') 
     }
 
     echo renderTemplate('../src/templates/shopify-wocommerce.php', [
+        'jobId' => $jobId,
+        'headers' => $headers,
+        'mappings' => $mappings
+    ]);
+} else if ($sourcePlatformCode === 'woocommerce' && $targetPlatformCode === 'shopify') {
+    $importer = new WooImporter($jobId);
+    $importer->import($filePath);
+
+    // read csv header
+    $fp = fopen($filePath, "r");
+    $headers = fgetcsv($fp);
+    fclose($fp);
+
+    $mappings = $db->query("
+    SELECT source_column, universal_field
+    FROM job_mappings
+    WHERE job_id = ?
+    ", [$jobId])->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    echo renderTemplate('../src/templates/woocommerce-shopify.php', [
         'jobId' => $jobId,
         'headers' => $headers,
         'mappings' => $mappings

@@ -1,6 +1,20 @@
-logs/*
-csv/*
-tmp/*
-uploads/*
-vendor/*
+# Ignore log files but keep the directory (optional)
+/logs/*.log
+/logs/! .gitkeep
+
+# Ignore csv files but keep the directory (optional)
+/uploads/*.csv
+/uploads/! .gitkeep
+
+# Ignore CSV exports
+/csv/*.csv
+
+# Ignore temporary files
+/tmp/
+*.tmp
+
+# Ignore the vendor folder (Composer dependencies)
+/vendor/
+
+# Security: NEVER commit the .env file
 .env

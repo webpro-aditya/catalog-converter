@@ -103,6 +103,26 @@ if ($sourcePlatformCode === 'shopify' && $targetPlatformCode === 'woocommerce') 
         'headers' => $headers,
         'mappings' => $mappings
     ]);
+} else if ($sourcePlatformCode === 'woocommerce' && $targetPlatformCode === 'magento') {
+    $importer = new WooImporter($jobId);
+    $importer->import($filePath);
+
+    // read csv header
+    $fp = fopen($filePath, "r");
+    $headers = fgetcsv($fp);
+    fclose($fp);
+
+    $mappings = $db->query("
+    SELECT source_column, universal_field
+    FROM job_mappings
+    WHERE job_id = ?
+    ", [$jobId])->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    echo renderTemplate('../src/templates/woocommerce-magento.php', [
+        'jobId' => $jobId,
+        'headers' => $headers,
+        'mappings' => $mappings
+    ]);
 } else {
     die('No default mappings found for the selected platform combination.');
 }

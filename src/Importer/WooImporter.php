@@ -147,7 +147,7 @@ class WooImporter
 
                 $this->saveImages(
                     $products[$parentSku],
-                    null,
+                    $variantId,
                     $data
                 );
             }

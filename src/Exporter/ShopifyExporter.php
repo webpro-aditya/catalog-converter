@@ -31,7 +31,8 @@ class ShopifyExporter
             'Option1 Value',
             'Option2 Name',
             'Option2 Value',
-            'Image Src'
+            'Image Src',
+            'Variant Image'
         ]);
 
         $products = $this->db->query("
@@ -75,6 +76,7 @@ class ShopifyExporter
 
                 // Image (first variant image or product image)
                 $row[] = $images[$variant['id']] ?? $images[0] ?? '';
+                $row[] = $images[$variant['id']] ?? $images[0] ?? '';
 
                 fputcsv($fp, $row);
             }
@@ -112,8 +114,8 @@ class ShopifyExporter
                     'name'  => ($counter === 0) ? $row['name'] : '',
                     'value' => $row['value']
                 ];
+                $counter++;
             }
-            $counter++;
         }
 
         return $out;

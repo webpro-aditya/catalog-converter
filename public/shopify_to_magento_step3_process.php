@@ -2,9 +2,9 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Database.php';
-require_once __DIR__ . '/../src/Importer/WooImporter.php';
+require_once __DIR__ . '/../src/Importer/ShopifyImporter.php';
 require_once __DIR__ . '/../src/Normalizer/UniversalBuilder.php';
-require_once __DIR__ . '/../src/Exporter/ShopifyExporter.php';
+require_once __DIR__ . '/../src/Exporter/MagentoExporter.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die('Invalid request');
@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $db = new Database();
 
-$jobId = (int) $_POST['job_id'];
+$jobId    = (int) ($_POST['job_id'] ?? 0);
 $mappings = $_POST['map'] ?? [];
 
 if (!$jobId || empty($mappings)) {
@@ -20,37 +20,36 @@ if (!$jobId || empty($mappings)) {
 }
 
 /**
- * 1️⃣ Clear existing mappings for this job
+ * 1️⃣ Clear previous mappings
  */
-$db->query("
-    DELETE FROM job_mappings
-    WHERE job_id = ?
-", [$jobId]);
+$db->query(
+    "DELETE FROM job_mappings WHERE job_id = ?",
+    [$jobId]
+);
 
 /**
  * 2️⃣ Save mappings
  */
 foreach ($mappings as $sourceColumn => $universalField) {
 
-    if ($universalField === '') continue;
+    if ($universalField === '') {
+        continue;
+    }
 
-    $db->query("
-        INSERT INTO job_mappings
-        (job_id, source_column, universal_field)
-        VALUES (?,?,?)
-    ", [
-        $jobId,
-        trim($sourceColumn),
-        trim($universalField)
-    ]);
+    $db->query(
+        "INSERT INTO job_mappings (job_id, source_column, universal_field)
+         VALUES (?,?,?)",
+        [$jobId, trim($sourceColumn), trim($universalField)]
+    );
 }
 
 /**
- * 3️⃣ Import Woo CSV → source_*
+ * 3️⃣ Load job
  */
-$job = $db->query("
-    SELECT * FROM import_jobs WHERE id = ?
-", [$jobId])->fetch(PDO::FETCH_ASSOC);
+$job = $db->query(
+    "SELECT * FROM import_jobs WHERE id = ?",
+    [$jobId]
+)->fetch(PDO::FETCH_ASSOC);
 
 if (!$job) {
     die('Invalid job');
@@ -58,38 +57,41 @@ if (!$job) {
 
 $csvPath = __DIR__ . '/../uploads/' . $job['file_name'];
 
-$importer = new WooImporter($jobId);
+/**
+ * 4️⃣ Import Shopify CSV
+ */
+$importer = new ShopifyImporter($jobId);
 $importer->import($csvPath);
 
 /**
- * 4️⃣ Build universal_* tables
+ * 5️⃣ Build universal model
  */
 $builder = new UniversalBuilder($jobId);
 $builder->build();
 
 /**
- * 5️⃣ Export to Shopify CSV
+ * 6️⃣ Export Magento CSV
  */
-$outputFile = __DIR__ . '/../uploads/shopify_export_' . $jobId . '.csv';
+$outputFile = __DIR__ . '/../uploads/magento_export_' . $jobId . '.csv';
 
-$exporter = new ShopifyExporter($jobId);
+$exporter = new MagentoExporter($jobId);
 $exporter->export($outputFile);
 
 /**
- * 6️⃣ Update job status
+ * 7️⃣ Mark job complete
  */
-$db->query("
-    UPDATE import_jobs
-    SET status = 'completed', completed_at = NOW()
-    WHERE id = ?
-", [$jobId]);
+$db->query(
+    "UPDATE import_jobs
+     SET status = 'completed', completed_at = NOW()
+     WHERE id = ?",
+    [$jobId]
+);
 
 ?>
-
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Export Ready</title>
+    <title>Magento Export Ready</title>
     <style>
         body {
             font-family: Arial, Helvetica, sans-serif;

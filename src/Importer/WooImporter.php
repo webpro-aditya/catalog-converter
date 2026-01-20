@@ -2,41 +2,19 @@
 
 require_once __DIR__ . '/../Database.php';
 require_once __DIR__ . '/../Logger.php';
+require_once __DIR__ . '/../../src/Common/Truncate.php';
 
 class WooImporter
 {
+    private $common;
     private $db;
     private $jobId;
 
     public function __construct($jobId)
     {
         $this->db = new Database();
+        $this->common = new Truncate();
         $this->jobId = $jobId;
-    }
-
-    public function truncateTables(array $tables)
-    {
-        try {
-            // Use the PDO instance already stored in your Database object
-            $pdo = $this->db->pdo;
-
-            // 1. Disable foreign key checks to allow truncating related tables
-            $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
-
-            foreach ($tables as $table) {
-                // Sanitize table name with backticks to prevent SQL errors
-                $pdo->exec("TRUNCATE TABLE `$table`");
-            }
-
-            // 2. Re-enable foreign key checks
-            $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
-
-            return true;
-        } catch (Exception $e) {
-            // Log error using your Logger class
-            Logger::log("Truncate Failed: " . $e->getMessage());
-            return false;
-        }
     }
 
     public function import($filePath)
@@ -53,7 +31,7 @@ class WooImporter
             'universal_variants'
         ];
 
-        if (!$this->truncateTables($tablesToClear)) {
+        if (!$this->common->truncateTables($tablesToClear)) {
             Logger::log("Failed to clear tables before import.");
             die("An error occurred while clearing tables.");
         }

@@ -2,42 +2,20 @@
 
 require_once __DIR__ . '/../../src/Database.php';
 require_once __DIR__ . '/../../src/Logger.php';
+require_once __DIR__ . '/../../src/Common/Truncate.php';
 
 class ShopifyImporter
 {
 
+    private $common;
     private $db;
     private $jobId;
 
     public function __construct($jobId)
     {
         $this->db = new Database();
+        $this->common = new Truncate();
         $this->jobId = $jobId;
-    }
-
-    public function truncateTables(array $tables)
-    {
-        try {
-            // Use the PDO instance already stored in your Database object
-            $pdo = $this->db->pdo;
-
-            // 1. Disable foreign key checks to allow truncating related tables
-            $pdo->exec('SET FOREIGN_KEY_CHECKS = 0');
-
-            foreach ($tables as $table) {
-                // Sanitize table name with backticks to prevent SQL errors
-                $pdo->exec("TRUNCATE TABLE `$table`");
-            }
-
-            // 2. Re-enable foreign key checks
-            $pdo->exec('SET FOREIGN_KEY_CHECKS = 1');
-
-            return true;
-        } catch (Exception $e) {
-            // Log error using your Logger class
-            Logger::log("Truncate Failed: " . $e->getMessage());
-            return false;
-        }
     }
 
     public function import($filePath)
@@ -54,7 +32,7 @@ class ShopifyImporter
             'universal_variants'
         ];
 
-        if (!$this->truncateTables($tablesToClear)) {
+        if (!$this->common->truncateTables($tablesToClear)) {
             Logger::log("Failed to clear tables before import.");
             die("An error occurred while clearing tables.");
         }
@@ -63,6 +41,7 @@ class ShopifyImporter
         $headers = fgetcsv($fp);
 
         $products = [];
+        $lastHandle = null;
 
         while ($row = fgetcsv($fp)) {
 
@@ -71,7 +50,11 @@ class ShopifyImporter
             }
 
             $data = array_combine($headers, $row);
-            $handle = trim($data['Handle'] ?? '');
+            $rawHandle = trim((string)($data['Handle'] ?? ''));
+            if ($rawHandle !== '') {
+                $lastHandle = $rawHandle;
+            }
+            $handle = $rawHandle !== '' ? $rawHandle : (string)$lastHandle;
 
             if ($handle === '') {
                 continue;
@@ -124,7 +107,7 @@ class ShopifyImporter
             $attributes = [];
 
             foreach ($attrNames as $i => $attrName) {
-                $value = trim($data["Option{$i}  Value"] ?? '');
+                $value = trim((string)($data["Option{$i} Value"] ?? ($data["Option{$i}  Value"] ?? '')));
 
                 if ($value !== '' && strtolower($value) !== 'default title') {
                     $attributes[] = [
@@ -143,6 +126,9 @@ class ShopifyImporter
                 empty(trim($data['Variant Price'] ?? ''));
 
             if ($isGhostVariant) {
+                if (!empty($data['Image Src']) || !empty($data['Variant Image'])) {
+                    $this->saveImages($productId, null, $data);
+                }
                 continue;
             }
 

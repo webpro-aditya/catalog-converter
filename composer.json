@@ -5,7 +5,7 @@
             "User\\CatalogConverter\\": "src/"
         },
         "files": [
-            "src/helpers.php"
+            "src/Helpers.php"
         ]
     },
     "authors": [

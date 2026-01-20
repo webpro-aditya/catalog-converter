@@ -67,20 +67,18 @@ class MagentoExporter
             }
 
             $variantAttributes = $this->getVariantAttributes($productId);
-            if (!$variantAttributes) {
-                continue;
-            }
-
             $variantImages = $this->getVariantImagesByProduct($productId);
 
             $productVariants[$productId]      = $variants;
             $productVariantAttrs[$productId]  = $variantAttributes;
             $productVariantImages[$productId] = $variantImages;
 
-            foreach ($variantAttributes as $attrs) {
-                foreach ($attrs as $name => $_) {
-                    $code = $this->normalizeAttributeCode($name);
-                    $allAttributeCodes[$code] = $name; // store original label
+            if ($variantAttributes) {
+                foreach ($variantAttributes as $attrs) {
+                    foreach ($attrs as $name => $_) {
+                        $code = $this->normalizeAttributeCode($name);
+                        $allAttributeCodes[$code] = $name; // store original label
+                    }
                 }
             }
         }
@@ -100,13 +98,70 @@ class MagentoExporter
 
             $productId = (int)$product['id'];
 
-            if (empty($productVariants[$productId]) || empty($productVariantAttrs[$productId])) {
+            if (empty($productVariants[$productId])) {
                 continue;
             }
 
             $variants          = $productVariants[$productId];
-            $variantAttributes = $productVariantAttrs[$productId];
+            $variantAttributes = $productVariantAttrs[$productId] ?? [];
             $variantImages     = $productVariantImages[$productId] ?? [];
+
+            if (empty($variantAttributes)) {
+                foreach ($variants as $variant) {
+                    $sku = $variant['sku'] ?: $product['parent_sku'];
+
+                    $images = $variantImages[(int)$variant['id']] ?? [];
+                    if (!$images) {
+                        foreach ($variantImages as $imgList) {
+                            if ($imgList) {
+                                $images = $imgList;
+                                break;
+                            }
+                        }
+                    }
+
+                    $baseImage      = $images[0] ?? '';
+                    $smallImage     = $images[0] ?? '';
+                    $thumbnailImage = $images[0] ?? '';
+                    $additional     = '';
+
+                    if (count($images) > 1) {
+                        $additional = implode(',', array_slice($images, 1));
+                    }
+
+                    $row = [
+                        $sku,
+                        'simple',
+                        'Default',
+                        $product['name'],
+                        $variant['regular_price'] ?? '',
+                        $variant['sale_price'] ?? '',
+                        'Catalog, Search',
+                        'Enabled',
+                        999,
+                        1,
+                        1,
+                        $product['description'],
+                        mb_substr(strip_tags($product['description']), 0, 255),
+                        'base',
+                        $this->uniqueUrlKey($sku),
+                        '',
+                        '',
+                        $baseImage,
+                        $smallImage,
+                        $thumbnailImage,
+                        $additional,
+                    ];
+
+                    foreach ($dynamicAttributeCodes as $code) {
+                        $row[] = '';
+                    }
+
+                    fputcsv($fp, $row);
+                }
+
+                continue;
+            }
 
             // -----------------------------------------
             // Collect attribute codes + labels for THIS product
@@ -223,7 +278,7 @@ class MagentoExporter
                     'Enabled',
                     999,
                     1,
-                    $variant['weight'] ?: 1,
+                    $variant['weight'] ?? 1,
                     '',
                     '',
                     'base',

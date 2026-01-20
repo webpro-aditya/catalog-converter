@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Database.php';
 
 $db = new Database();
@@ -161,7 +162,7 @@ $platforms = $db->query("SELECT id, name, code FROM platforms WHERE is_active=1"
         // 1. Select the Source Platform (Shopify)
         const sourceSelect = document.querySelector('select[name="source_platform"]');
         if (sourceSelect) {
-            sourceSelect.value = 'woocommerce';
+            sourceSelect.value = 'shopify';
         }
 
         // 2. Select the Target Platform (Woocommerce)

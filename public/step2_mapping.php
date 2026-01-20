@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Database.php';
 require_once __DIR__ . '/../src/Importer/ShopifyImporter.php';
 require_once __DIR__ . '/../src/Importer/WooImporter.php';
-include_once __DIR__ . '/../src/Helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') die("Invalid request");
 

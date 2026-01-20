@@ -124,7 +124,7 @@ class ShopifyImporter
             $attributes = [];
 
             foreach ($attrNames as $i => $attrName) {
-                $value = trim($data["Option{$i} Value"] ?? '');
+                $value = trim($data["Option{$i}  Value"] ?? '');
 
                 if ($value !== '' && strtolower($value) !== 'default title') {
                     $attributes[] = [

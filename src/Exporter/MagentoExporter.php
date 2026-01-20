@@ -7,7 +7,7 @@ class MagentoExporter
     private $db;
     private $jobId;
 
-    public function __construct($jobId)
+    public function __construct(int $jobId)
     {
         $this->db = new Database();
         $this->jobId = $jobId;
@@ -17,10 +17,10 @@ class MagentoExporter
     {
         $fp = fopen($filePath, 'w');
 
-        // Magento headers (minimal + correct)
-        fputcsv($fp, [
+        // Base Magento REQUIRED headers (fixed)
+        $baseHeaders = [
             'sku',
-            'type',
+            'product_type',
             'attribute_set_code',
             'name',
             'price',
@@ -33,21 +33,136 @@ class MagentoExporter
             'description',
             'short_description',
             'product_websites',
-            'configurable_variations'
-        ]);
+            'url_key',
+            'configurable_variation_labels',
+            'configurable_variations',
+            // image columns
+            'base_image',
+            'small_image',
+            'thumbnail_image',
+            'additional_images',
+        ];
 
+        // Load products for this job
         $products = $this->db->query(
             "SELECT * FROM universal_products WHERE job_id = ?",
             [$this->jobId]
         )->fetchAll(PDO::FETCH_ASSOC);
 
+        // ------------------------------------------------------------------
+        // FIRST PASS: collect dynamic attribute codes across ALL products
+        //            and cache variants, attributes, images per product
+        // ------------------------------------------------------------------
+        $allAttributeCodes      = []; // code => label
+        $productVariants        = []; // product_id => [variants...]
+        $productVariantAttrs    = []; // product_id => [variant_id => [name => value]]
+        $productVariantImages   = []; // product_id => [variant_id => [url, ...]]
+
+        foreach ($products as $product) {
+            $productId = (int)$product['id'];
+
+            $variants = $this->getVariants($productId);
+            if (!$variants) {
+                continue;
+            }
+
+            $variantAttributes = $this->getVariantAttributes($productId);
+            if (!$variantAttributes) {
+                continue;
+            }
+
+            $variantImages = $this->getVariantImagesByProduct($productId);
+
+            $productVariants[$productId]      = $variants;
+            $productVariantAttrs[$productId]  = $variantAttributes;
+            $productVariantImages[$productId] = $variantImages;
+
+            foreach ($variantAttributes as $attrs) {
+                foreach ($attrs as $name => $_) {
+                    $code = $this->normalizeAttributeCode($name);
+                    $allAttributeCodes[$code] = $name; // store original label
+                }
+            }
+        }
+
+        // Dynamic attribute columns (sorted for stable order)
+        $dynamicAttributeCodes = array_keys($allAttributeCodes);
+        sort($dynamicAttributeCodes);
+
+        // Build final header row: base headers + dynamic attribute columns
+        $header = array_merge($baseHeaders, $dynamicAttributeCodes);
+        fputcsv($fp, $header);
+
+        // ------------------------------------------------------------------
+        // SECOND PASS: output rows product by product
+        // ------------------------------------------------------------------
         foreach ($products as $product) {
 
-            $variants = $this->getVariants($product['id']);
-            $attributes = $this->getConfigurableAttributes($product['id']);
+            $productId = (int)$product['id'];
 
-            // ---------- CONFIGURABLE PRODUCT ----------
-            fputcsv($fp, [
+            if (empty($productVariants[$productId]) || empty($productVariantAttrs[$productId])) {
+                continue;
+            }
+
+            $variants          = $productVariants[$productId];
+            $variantAttributes = $productVariantAttrs[$productId];
+            $variantImages     = $productVariantImages[$productId] ?? [];
+
+            // -----------------------------------------
+            // Collect attribute codes + labels for THIS product
+            // -----------------------------------------
+            $attributeLabels = []; // code => label
+
+            foreach ($variantAttributes as $attrs) {
+                foreach ($attrs as $name => $_) {
+                    $code = $this->normalizeAttributeCode($name);
+                    $attributeLabels[$code] = $name; // original label
+                }
+            }
+
+            // Build configurable_variation_labels string
+            // e.g. color=Color,size=Size
+            $variationLabels = [];
+            foreach ($attributeLabels as $code => $label) {
+                $variationLabels[] = "{$code}={$label}";
+            }
+
+            // -----------------------------------------
+            // Build configurable_variations string
+            // AND map per-variant attribute values by code
+            // -----------------------------------------
+            $configurableVariations = [];
+            $variantSuperValues     = []; // [variant_id][code] = value
+
+            foreach ($variants as $variant) {
+                $variantId = (int)$variant['id'];
+
+                if (empty($variantAttributes[$variantId])) {
+                    continue;
+                }
+
+                $parts = [];
+                $parts[] = 'sku=' . $variant['sku'];
+
+                foreach ($variantAttributes[$variantId] as $attrName => $attrValue) {
+                    $code  = $this->normalizeAttributeCode($attrName);
+                    $value = $this->normalizeAttributeValue($attrValue);
+                    $parts[] = "{$code}={$value}";
+
+                    $variantSuperValues[$variantId][$code] = $value;
+                }
+
+                $configurableVariations[] = implode(',', $parts);
+            }
+
+            if (!$configurableVariations) {
+                continue;
+            }
+
+            // -----------------------------------------
+            // CONFIGURABLE PRODUCT ROW
+            // -----------------------------------------
+            $configRow = [
                 $product['parent_sku'],
                 'configurable',
                 'Default',
@@ -60,20 +175,44 @@ class MagentoExporter
                 '',
                 '',
                 $product['description'],
-                substr(strip_tags($product['description']), 0, 255),
+                mb_substr(strip_tags($product['description']), 0, 255),
                 'base',
-                ''
-            ]);
+                $this->uniqueUrlKey($product['parent_sku']),
+                implode(',', $variationLabels),
+                implode('|', $configurableVariations),
+                // image columns for configurable (empty or set a main image if you want)
+                '',
+                '',
+                '',
+                '',
+            ];
 
-            // ---------- SIMPLE VARIANTS ----------
+            // Add empty placeholders for all dynamic attributes on configurable row
+            foreach ($dynamicAttributeCodes as $code) {
+                $configRow[] = '';
+            }
+
+            fputcsv($fp, $configRow);
+
+            // -----------------------------------------
+            // SIMPLE VARIANTS
+            // -----------------------------------------
             foreach ($variants as $variant) {
+                $variantId = (int)$variant['id'];
 
-                $variationString = $this->buildVariationString(
-                    $attributes,
-                    $variant['id']
-                );
+                // determine images for this variant
+                $images = $variantImages[$variantId] ?? [];
+                $baseImage      = $images[0] ?? '';
+                $smallImage     = $images[0] ?? '';
+                $thumbnailImage = $images[0] ?? '';
+                $additional     = '';
 
-                fputcsv($fp, [
+                if (count($images) > 1) {
+                    // Magento expects comma-separated file names/paths
+                    $additional = implode(',', array_slice($images, 1));
+                }
+
+                $row = [
                     $variant['sku'],
                     'simple',
                     'Default',
@@ -84,19 +223,35 @@ class MagentoExporter
                     'Enabled',
                     999,
                     1,
-                    $variant['weight'] ?? '',
+                    $variant['weight'] ?: 1,
                     '',
                     '',
                     'base',
-                    $variationString
-                ]);
+                    $this->uniqueUrlKey($variant['sku']),
+                    '',
+                    '',
+                    $baseImage,
+                    $smallImage,
+                    $thumbnailImage,
+                    $additional,
+                ];
+
+                // Append dynamic attribute values in the same order as header
+                foreach ($dynamicAttributeCodes as $code) {
+                    $value = $variantSuperValues[$variantId][$code] ?? '';
+                    $row[] = $value;
+                }
+
+                fputcsv($fp, $row);
             }
         }
 
         fclose($fp);
     }
 
-    private function getVariants($productId): array
+    // --------------------------------------------------
+
+    private function getVariants(int $productId): array
     {
         return $this->db->query(
             "SELECT * FROM universal_variants WHERE product_id = ?",
@@ -104,38 +259,59 @@ class MagentoExporter
         )->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    private function getConfigurableAttributes($productId): array
+    private function getVariantAttributes(int $productId): array
     {
         $rows = $this->db->query(
-            "SELECT DISTINCT name FROM universal_attributes
+            "SELECT variant_id, name, value
+             FROM universal_attributes
              WHERE product_id = ? AND variant_id IS NOT NULL",
             [$productId]
-        )->fetchAll(PDO::FETCH_COLUMN);
-
-        return $rows;
-    }
-
-    private function buildVariationString(array $attributeNames, int $variantId): string
-    {
-        $rows = $this->db->query(
-            "SELECT name, value
-             FROM universal_attributes
-             WHERE variant_id = ?",
-            [$variantId]
         )->fetchAll(PDO::FETCH_ASSOC);
 
-        $map = [];
+        $out = [];
         foreach ($rows as $r) {
-            $map[$r['name']] = $r['value'];
+            $out[$r['variant_id']][$r['name']] = $r['value'];
         }
 
-        $pairs = [];
-        foreach ($attributeNames as $attr) {
-            if (isset($map[$attr])) {
-                $pairs[] = $attr . '=' . $map[$attr];
-            }
+        return $out;
+    }
+
+    private function getVariantImagesByProduct(int $productId): array
+    {
+        $rows = $this->db->query(
+            "SELECT variant_id, url
+             FROM universal_images
+             WHERE product_id = ? AND variant_id IS NOT NULL",
+            [$productId]
+        )->fetchAll(PDO::FETCH_ASSOC);
+
+        $out = [];
+        foreach ($rows as $r) {
+            $out[$r['variant_id']][] = $r['url'];
         }
 
-        return implode(',', $pairs);
+        return $out;
+    }
+
+    private function normalizeAttributeCode(string $name): string
+    {
+        $code = strtolower($name);
+        $code = preg_replace('/[^a-z0-9_]/', '_', $code);
+        $code = preg_replace('/_+/', '_', $code);
+        return trim($code, '_');
+    }
+
+    /**
+     * IMPORTANT:
+     * Magento expects attribute OPTION LABELS exactly as created in admin
+     */
+    private function normalizeAttributeValue(string $value): string
+    {
+        return trim($value);
+    }
+
+    private function uniqueUrlKey(string $sku): string
+    {
+        return strtolower(preg_replace('/[^a-z0-9\-]/', '-', $sku));
     }
 }

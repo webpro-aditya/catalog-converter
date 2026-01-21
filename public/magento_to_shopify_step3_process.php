@@ -1,0 +1,198 @@
+<?php
+
+require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/../src/Database.php';
+require_once __DIR__ . '/../src/Importer/MagentoImporter.php';
+require_once __DIR__ . '/../src/Normalizer/UniversalBuilder.php';
+require_once __DIR__ . '/../src/Exporter/ShopifyExporter.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    die('Invalid request');
+}
+
+$db = new Database();
+
+$jobId = (int) ($_POST['job_id'] ?? 0);
+$mappings = $_POST['map'] ?? [];
+
+if (!$jobId || empty($mappings)) {
+    die('Missing job or mappings');
+}
+
+/**
+ * 1️⃣ Clear previous job mappings
+ */
+$db->query(
+    "DELETE FROM job_mappings WHERE job_id = ?",
+    [$jobId]
+);
+
+/**
+ * 2️⃣ Save new mappings
+ */
+foreach ($mappings as $sourceColumn => $universalField) {
+
+    if ($universalField === '') {
+        continue;
+    }
+
+    $db->query(
+        "INSERT INTO job_mappings (job_id, source_column, universal_field)
+         VALUES (?,?,?)",
+        [
+            $jobId,
+            trim($sourceColumn),
+            trim($universalField)
+        ]
+    );
+}
+
+/**
+ * 3️⃣ Load import job
+ */
+$job = $db->query(
+    "SELECT * FROM import_jobs WHERE id = ?",
+    [$jobId]
+)->fetch(PDO::FETCH_ASSOC);
+
+if (!$job) {
+    die('Invalid job');
+}
+
+$csvPath = __DIR__ . '/../uploads/' . $job['file_name'];
+
+/**
+ * 4️⃣ Import MAGENTO CSV → source_*
+ */
+$importer = new MagentoImporter($jobId);
+$importer->import($csvPath);
+
+/**
+ * 5️⃣ Normalize → universal_*
+ */
+$builder = new UniversalBuilder($jobId);
+$builder->build();
+
+/**
+ * 6️⃣ Export → SHOPIFY CSV
+ */
+$outputFile = __DIR__ . '/../uploads/shopify_export_' . $jobId . '.csv';
+
+$exporter = new ShopifyExporter($jobId);
+$exporter->export($outputFile);
+
+/**
+ * 7️⃣ Mark job complete
+ */
+$db->query(
+    "UPDATE import_jobs
+     SET status = 'completed',
+         completed_at = NOW()
+     WHERE id = ?",
+    [$jobId]
+);
+
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shopify Export Ready</title>
+    <style>
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f6fb;
+            margin: 0;
+        }
+
+        .wrapper {
+            max-width: 700px;
+            margin: 60px auto;
+            padding: 10px;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .08);
+            padding: 35px;
+            text-align: center;
+        }
+
+        .icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: #e9f8ef;
+            color: #2fa84f;
+            font-size: 34px;
+            line-height: 70px;
+            margin: 0 auto 18px auto;
+        }
+
+        h2 {
+            margin: 0;
+            font-size: 26px;
+            color: #222;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-top: 8px;
+            margin-bottom: 25px;
+        }
+
+        a.download-btn {
+            background: #4a6cf7;
+            color: #fff;
+            padding: 14px 22px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 15px;
+            display: inline-block;
+        }
+
+        a.download-btn:hover {
+            background: #274df5;
+        }
+
+        .footer-note {
+            color: #777;
+            margin-top: 18px;
+            font-size: 13px;
+        }
+
+        .steps {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 12px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="wrapper">
+    <div class="card">
+
+        <div class="icon">✓</div>
+        <div class="steps">Step 3 of 3 — Completed</div>
+
+        <h2>Your Shopify export is ready</h2>
+
+        <div class="subtitle">
+            Download the CSV and import it into Shopify Admin → Products → Import
+        </div>
+
+        <a href="<?= '../uploads/' . basename($outputFile) ?>" download class="download-btn">
+            Download Shopify CSV
+        </a>
+
+        <div class="footer-note">
+            Want to convert another file?
+            <a href="step1_upload.php">Start a new import</a>
+        </div>
+
+    </div>
+</div>
+</body>
+</html>

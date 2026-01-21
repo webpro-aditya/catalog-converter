@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/Database.php';
+require_once __DIR__ . '/../src/Importer/MagentoImporter.php';
 require_once __DIR__ . '/../src/Importer/ShopifyImporter.php';
 require_once __DIR__ . '/../src/Importer/WooImporter.php';
 
@@ -139,6 +140,46 @@ if ($sourcePlatformCode === 'shopify' && $targetPlatformCode === 'woocommerce') 
     ", [$jobId])->fetchAll(PDO::FETCH_KEY_PAIR);
 
     echo renderTemplate('../src/templates/shopify-magento.php', [
+        'jobId' => $jobId,
+        'headers' => $headers,
+        'mappings' => $mappings
+    ]);
+} else if ($sourcePlatformCode === 'magento' && $targetPlatformCode === 'shopify') { 
+    $importer = new MagentoImporter($jobId);
+    $importer->import($filePath);
+
+    // read csv header
+    $fp = fopen($filePath, "r");
+    $headers = fgetcsv($fp);
+    fclose($fp);
+
+    $mappings = $db->query("
+    SELECT source_column, universal_field
+    FROM job_mappings
+    WHERE job_id = ?
+    ", [$jobId])->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    echo renderTemplate('../src/templates/magento-shopify.php', [
+        'jobId' => $jobId,
+        'headers' => $headers,
+        'mappings' => $mappings
+    ]);
+} else if ($sourcePlatformCode === 'magento' && $targetPlatformCode === 'woocommerce') { 
+    $importer = new MagentoImporter($jobId);
+    $importer->import($filePath);
+
+    // read csv header
+    $fp = fopen($filePath, "r");
+    $headers = fgetcsv($fp);
+    fclose($fp);
+
+    $mappings = $db->query("
+    SELECT source_column, universal_field
+    FROM job_mappings
+    WHERE job_id = ?
+    ", [$jobId])->fetchAll(PDO::FETCH_KEY_PAIR);
+
+    echo renderTemplate('../src/templates/magento-woocommerce.php', [
         'jobId' => $jobId,
         'headers' => $headers,
         'mappings' => $mappings

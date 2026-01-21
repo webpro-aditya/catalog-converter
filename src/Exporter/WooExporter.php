@@ -60,8 +60,11 @@ class WooExporter
         ", [$this->jobId])->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($products as $product) {
-            $this->writeProductRow($fp, $product, $attributeNames);
-            $this->writeVariants($fp, $product, $attributeNames);
+            $productAttrs = $this->getProductAttributes($product['id']);
+            $this->writeProductRow($fp, $product, $attributeNames, $productAttrs);
+            if (!empty($productAttrs)) {
+                $this->writeVariants($fp, $product, $attributeNames);
+            }
         }
 
         fclose($fp);
@@ -72,9 +75,8 @@ class WooExporter
      * PRODUCT ROW
      * -------------------------------------------------
      */
-    private function writeProductRow($fp, $product, $attributeNames)
+    private function writeProductRow($fp, $product, $attributeNames, $productAttrs)
     {
-        $productAttrs = $this->getProductAttributes($product['id']);
         $image = $this->getProductImage($product['id']);
 
         $row = [

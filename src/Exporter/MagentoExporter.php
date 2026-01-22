@@ -106,9 +106,28 @@ class MagentoExporter
             $variantAttributes = $productVariantAttrs[$productId] ?? [];
             $variantImages     = $productVariantImages[$productId] ?? [];
 
+            $usedSkus = [];
+            $variantSkus = [];
+
+            foreach ($variants as $variant) {
+                $variantId = (int)$variant['id'];
+                $sku = $this->sanitizeSku((string)($variant['sku'] ?? ''));
+
+                if ($sku === '') {
+                    $sku = $this->buildVariantSku(
+                        (string)($product['parent_sku'] ?? ''),
+                        $variantAttributes[$variantId] ?? [],
+                        $variantId
+                    );
+                }
+
+                $variantSkus[$variantId] = $this->ensureUniqueSku($sku, $usedSkus, $variantId);
+            }
+
             if (empty($variantAttributes)) {
                 foreach ($variants as $variant) {
-                    $sku = $variant['sku'] ?: $product['parent_sku'];
+                    $variantId = (int)$variant['id'];
+                    $sku = $variantSkus[$variantId] ?? $this->sanitizeSku((string)($product['parent_sku'] ?? ''));
 
                     $images = $variantImages[(int)$variant['id']] ?? [];
                     if (!$images) {
@@ -197,7 +216,7 @@ class MagentoExporter
                 }
 
                 $parts = [];
-                $parts[] = 'sku=' . $variant['sku'];
+                $parts[] = 'sku=' . ($variantSkus[$variantId] ?? $this->sanitizeSku((string)($variant['sku'] ?? '')));
 
                 foreach ($variantAttributes[$variantId] as $attrName => $attrValue) {
                     $code  = $this->normalizeAttributeCode($attrName);
@@ -255,6 +274,10 @@ class MagentoExporter
             foreach ($variants as $variant) {
                 $variantId = (int)$variant['id'];
 
+                if (empty($variantSuperValues[$variantId])) {
+                    continue;
+                }
+
                 // determine images for this variant
                 $images = $variantImages[$variantId] ?? [];
                 $baseImage      = $images[0] ?? '';
@@ -267,8 +290,10 @@ class MagentoExporter
                     $additional = implode(',', array_slice($images, 1));
                 }
 
+                $sku = $variantSkus[$variantId] ?? $this->sanitizeSku((string)($variant['sku'] ?? ''));
+
                 $row = [
-                    $variant['sku'],
+                    $sku,
                     'simple',
                     'Default',
                     $product['name'],
@@ -282,7 +307,7 @@ class MagentoExporter
                     '',
                     '',
                     'base',
-                    $this->uniqueUrlKey($variant['sku']),
+                    $this->uniqueUrlKey($sku),
                     '',
                     '',
                     $baseImage,
@@ -368,5 +393,60 @@ class MagentoExporter
     private function uniqueUrlKey(string $sku): string
     {
         return strtolower(preg_replace('/[^a-z0-9\-]/', '-', $sku));
+    }
+
+    private function sanitizeSku(string $sku): string
+    {
+        $sku = trim($sku);
+        if ($sku === '') {
+            return '';
+        }
+
+        if ($sku[0] === "'") {
+            $sku = substr($sku, 1);
+        }
+
+        return trim($sku);
+    }
+
+    private function buildVariantSku(string $parentSku, array $attrs, int $variantId): string
+    {
+        $parentSku = $this->sanitizeSku($parentSku);
+
+        $parts = [];
+        if (!empty($attrs)) {
+            ksort($attrs);
+
+            foreach ($attrs as $name => $value) {
+                $code = $this->normalizeAttributeCode((string)$name);
+                $val = $this->normalizeAttributeValue((string)$value);
+
+                if ($code !== '' && $val !== '') {
+                    $parts[] = $code . '=' . $val;
+                }
+            }
+        }
+
+        $fingerprint = $parentSku . '|' . implode('|', $parts);
+        if ($fingerprint === '|') {
+            $fingerprint .= (string)$variantId;
+        }
+
+        $hash = substr(sha1($fingerprint), 0, 8);
+        return ($parentSku !== '' ? $parentSku : 'variant') . '-' . $hash;
+    }
+
+    private function ensureUniqueSku(string $sku, array &$usedSkus, int $variantId): string
+    {
+        $candidate = $sku;
+        $n = 0;
+
+        while (isset($usedSkus[$candidate])) {
+            $n++;
+            $candidate = $sku . '-' . substr(sha1($sku . '|' . $variantId . '|' . $n), 0, 4);
+        }
+
+        $usedSkus[$candidate] = true;
+        return $candidate;
     }
 }

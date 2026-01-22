@@ -162,13 +162,13 @@ $platforms = $db->query("SELECT id, name, code FROM platforms WHERE is_active=1"
         // 1. Select the Source Platform (Shopify)
         const sourceSelect = document.querySelector('select[name="source_platform"]');
         if (sourceSelect) {
-            sourceSelect.value = 'shopify';
+            sourceSelect.value = 'magento';
         }
 
         // 2. Select the Target Platform (Woocommerce)
         const targetSelect = document.querySelector('select[name="target_platform"]');
         if (targetSelect) {
-            targetSelect.value = 'magento';
+            targetSelect.value = 'shopify';
         }
     });
 </script>
